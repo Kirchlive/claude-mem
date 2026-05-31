@@ -110,6 +110,7 @@
 </table>
 
 <p align="center">
+  <a href="#fork-changes--kirchliveclaude-mem">Fork Changes</a> •
   <a href="#quick-start">Quick Start</a> •
   <a href="#how-it-works">How It Works</a> •
   <a href="#mcp-search-tools">Search Tools</a> •
@@ -122,6 +123,70 @@
 <p align="center">
   Claude-Mem seamlessly preserves context across sessions by automatically capturing tool usage observations, generating semantic summaries, and making them available to future sessions. This enables Claude to maintain continuity of knowledge about projects even after sessions end or reconnect.
 </p>
+
+---
+
+## Fork Changes — Kirchlive/claude-mem
+
+> This fork carries fixes, performance optimizations and skill cleanups beyond the upstream `thedotmack/claude-mem`. Upstream PR pending: [#2728](https://github.com/thedotmack/claude-mem/pull/2728) (corpus fixes + tool descriptions). Bug A FTS5 trap filed as [#2729](https://github.com/thedotmack/claude-mem/issues/2729).
+
+### 🐛 Bug fixes
+
+| Fix | File | Symptom before |
+|-----|------|----------------|
+| **camelCase params dual-accept** | `src/services/worker/http/routes/CorpusRoutes.ts` | `build_corpus(dateStart=…, dateEnd=…)` silently dropped the date filters; Zod `.passthrough()` kept the camelCase keys on the body but the handler only read snake_case. Now accepts both. |
+| **`obs_type` key routing** | `src/services/worker/knowledge/CorpusBuilder.ts` | `build_corpus(types="bugfix,decision")` returned only the first type. Builder was setting `searchArgs.type` (the search-router discriminator `observations|sessions|prompts`) instead of `searchArgs.obs_type`. Multi-type filters now apply correctly. |
+| **Hook-client message-loss race** | `scripts/hook-client.mjs` (Sprint 2) | Fire-and-forget over UDS dropped frames when the kernel TCP-FIN beat the daemon's `data()` callback. Replaced with an RPC-acknowledgment pattern (write → await `{ok,queued}` reply → close). 100% delivery in stress test. |
+| **Daemon lock-file collision** | `scripts/daemon-server.mjs` (Sprint 2) | The lock was hardcoded to `~/.claude-mem/daemon.lock` regardless of `--socket` path, so test daemons collided with the live daemon. Lock now pairs with the socket path (`/tmp/x.sock` → `/tmp/x.lock`). |
+| **FK constraint silent loss** | `scripts/daemon-server.mjs` (Sprint 2) | `session_db_id=0` sentinel under `PRAGMA foreign_keys=ON` caused every UDS-path insert to silently fail. `resolveSessionDbId()` now creates/looks up the `sdk_sessions` row before insert. |
+| **UTF-8 multi-byte corruption** | `scripts/daemon-server.mjs` (Sprint 2) | `chunk.toString()` broke on multi-byte UTF-8 boundaries (emoji/CJK/umlauts), corrupting JSON. Now uses `StringDecoder` from `node:string_decoder`. |
+| **Auto-spawn race** | `scripts/daemon-server.mjs` (Sprint 2) | Concurrent hooks spawned multiple daemons; each `unlinkSync(SOCK)` before `listen()` produced split-brain. Now an O_EXCL lock-file with PID-aliveness check + stale takeover. |
+
+### ⚡ Performance & architecture
+
+- **UDS daemon pipeline** (Sprint 1): replaces per-hook Bun cold-start with a long-lived UDS singleton. Hook latency **467 ms p50 → 60 ms p50 (~7.8×)**. Fast-skip path for non-interesting tools (~54 ms). Warm RPC roundtrip 0.6–2 ms (theoretical ceiling ~250× if Bun cold-start eliminated).
+- **NDJSON framing + 200 ms RPC timeout** keeps the wire format simple while preserving delivery guarantees.
+- **Importance heuristic** scores each observation 0..1 (failure +0.4, edits + git-tracked +0.2, ADR-pattern auto-pinned to 1.0).
+- **Idempotent bundle patcher** (`plugin-hook-perf-patch.v2.mjs`) modifies `hooks.json` / `codex-hooks.json` with `.uds-bak` backups and `--rollback`. No source-bundle edits required.
+
+### 📖 MCP tool documentation
+
+14 tool descriptions rewritten so the LLM picks the right tool on first try:
+
+- All 8 **server-beta-only tools** (`observation_*`, `memory_*` aliases) prefix their description with `[Server-beta runtime only — DISABLED in default "worker" runtime.]` and point at the worker-runtime equivalent. The transport already errored at call-time; surfacing it in the description removes one round-trip of misuse.
+- **`search.obs_type`** now warns about the FTS5 type-token trap: `query="bugfix" + obs_type="bugfix"` returns 0 because the FTS5 index covers title/subtitle/narrative/text/facts/concepts but not the `type` column. Use one or the other for type-token queries.
+- **`prime_corpus` / `query_corpus` / `rebuild_corpus` / `reprime_corpus`** preconditions are now explicit — `query_corpus` errors when unprimed, `rebuild` does not reprime, responses are LLM-generative not deterministic.
+- **`build_corpus`** lists the canonical type set (`bugfix,decision,feature,change,refactor,discovery`) and emphasises verifying `stats.observation_count` before priming.
+
+### 🧠 Skill cleanups
+
+| Skill | Change |
+|-------|--------|
+| `wowerpoint` | `disable-model-invocation: true` + transparency prefix about the 3rd-party Cloudflare Worker, env-vars (`WOWERPOINT_UPLOAD_TOKEN`, `WOWERPOINT_API_BASE`, `WOWERPOINT_VIEWER_BASE`) and NotebookLM/Google data flow. Skill still produces a local PDF; share-link step skips gracefully when env-vars are absent. |
+| `version-bump` (aka `claude-code-plugin-release`) | `disable-model-invocation: true` + `[MAINTAINER ONLY]` prefix. Prevents accidental `npm publish` attempts on forks/clones. |
+| `mem-search` | Examples section now warns about the FTS5 type-token trap and shows correct/anti-pattern queries. |
+| `claude-mem-manual` | Adds a dedicated FTS5 trap section, marks the `smart_*` AST tools as the supported code-nav path, drops stale "non-functional" claim. |
+| `knowledge-agent` | Adds a multi-type + date-range example and emphasises checking `stats.observation_count > 0` before priming. |
+
+### 🔬 Test surface
+
+- **38/38 unit tests** green across the daemon, hook-client, patcher, importance, settings-doctor and memory-bank-export modules.
+- **8/8 patcher unit tests** for the live-bundle-patcher (apply, verify, rollback, idempotent, syntax-guard).
+- **All 21 MCP tools live-smoke-tested** post-deploy — 13 functional, 8 expected runtime-blocked (server-beta-only by design).
+
+### 🛟 Rollback
+
+The patcher is idempotent and reversible. Backups live next to the patched files (`.sprint3-bak`, `.uds-bak`). One-liner rollback:
+
+```bash
+bun work-sprint3/patch-mcp-bugs.mjs --rollback
+```
+
+### Status
+
+- Live in this fork on branch `sprint-3-mcp-fixes`.
+- Upstream PR open at [thedotmack/claude-mem#2728](https://github.com/thedotmack/claude-mem/pull/2728).
+- Bug A FTS5 trap proposed as separate fix in [thedotmack/claude-mem#2729](https://github.com/thedotmack/claude-mem/issues/2729).
 
 ---
 
