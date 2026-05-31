@@ -147,8 +147,8 @@ Sprint 1 → 2 → 3 patch notes. Upstream PR [#2728](https://github.com/thedotm
 - New: MCP sidecar — 4 resources + 3 prompts.
 
 **🛠️ Fixes (Sprint 2 P0s)**
-- Fix: resolve+insert sdk_sessions before pending_messages — `session_db_id=0` → 100% silent loss.
-- Fix: callback-based write+drain — `socket.write` without drain-await → hook data never reached.
+- Fix: resolve+insert sdk_sessions before pending_messages — `session_db_id=0` → silent loss.
+- Fix: callback-based write+drain — `socket.write` without drain → hook data never reached.
 - Fix: `node:string_decoder` framing — `chunk.toString()` with emojis → corrupted JSON.
 - Fix: O_EXCL lock file — concurrent hook clients spawning multiple daemons.
 - Fix: patcher `--fix-session-start-matcher` — memory not injected on `claude --resume`.
