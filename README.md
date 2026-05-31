@@ -128,46 +128,46 @@
 
 ## Fork Changes — Kirchlive/claude-mem
 
-Patch notes for Sprint 1 → 2 → 3 modifications over upstream `thedotmack/claude-mem`. Upstream PR: [#2728](https://github.com/thedotmack/claude-mem/pull/2728) · Bug A issue: [#2729](https://github.com/thedotmack/claude-mem/issues/2729).
+Sprint 1 → 2 → 3 patch notes. Upstream PR [#2728](https://github.com/thedotmack/claude-mem/pull/2728) · Issue [#2729](https://github.com/thedotmack/claude-mem/issues/2729).
 
 **🐛 Bug Fixes**
-- `build_corpus`: camelCase `dateStart`/`dateEnd` now accepted alongside snake_case — date filters were silently dropped before.
-- `build_corpus`: multi-type filter (`types="bugfix,decision"`) now returns all matching types — was collapsing to one via wrong `searchArgs.type` key.
-- `hook-client`: RPC-acknowledgment replaces fire-and-forget — eliminates message-loss race where socket FIN beat the daemon's read.
-- `daemon-server`: lock file pairs with `--socket` path — test daemons no longer collide with the live daemon lock.
-- `daemon-server`: `resolveSessionDbId()` inserts the `sdk_sessions` row before `pending_messages` — fixes 100% FK-violation silent insert loss.
-- `daemon-server`: `StringDecoder` replaces `chunk.toString()` — fixes JSON corruption on emoji/CJK/umlaut UTF-8 boundaries.
-- `daemon-server`: O_EXCL lock with PID-aliveness check + stale takeover — eliminates concurrent-spawn split-brain.
+- `build_corpus`: camelCase `dateStart`/`dateEnd` dual-accept; previously silently dropped.
+- `build_corpus`: multi-type filter returns all types; was wrong `searchArgs.type` key.
+- `hook-client`: RPC-ack pattern; fixes UDS frame loss when FIN beat the daemon read.
+- `daemon-server`: lock pairs with `--socket` path; test daemons no longer collide.
+- `daemon-server`: `resolveSessionDbId()` before insert; fixes 100% FK-violation loss.
+- `daemon-server`: `StringDecoder` framing; fixes multi-byte UTF-8 JSON corruption.
+- `daemon-server`: O_EXCL lock with stale-takeover; ends concurrent-spawn split-brain.
 
 **⚡ Performance**
-- Hook latency p50: **467 ms → 60 ms (~7.8×)** via long-lived UDS singleton daemon replacing per-hook Bun cold-start.
+- Hook latency p50: **467 ms → 60 ms (~7.8×)** via long-lived UDS singleton daemon.
 - Fast-skip path for non-interesting tools: ~54 ms p50.
 - Warm RPC roundtrip: 0.6–2 ms (Bun cold-start is the remaining floor).
-- NDJSON wire format + 200 ms RPC timeout — simple framing, bounded latency.
-- Importance heuristic scores observations 0..1 (failure +0.4, edits-on-tracked-files +0.2, ADR-pattern auto-pin to 1.0).
-- Idempotent bundle patcher with `.uds-bak` backups and `--rollback` — no source-bundle edits, plugin updates remain safe to apply.
+- NDJSON wire format + 200 ms RPC timeout: simple framing, bounded latency.
+- Importance heuristic 0..1 (failure +0.4, edits +0.2, ADR-pattern auto-pin to 1.0).
+- Idempotent bundle patcher with `.uds-bak` backups and `--rollback`; update-safe.
 
 **📖 MCP Tool Descriptions**
-- 8 server-beta-only tools prefixed `[Server-beta runtime only — DISABLED in default "worker" runtime.]` with pointer to the worker-runtime equivalent.
-- `search.obs_type` warns about the FTS5 type-token trap (`query="bugfix" + obs_type="bugfix"` returns 0 because `type` isn't in the FTS5 index).
-- `prime_corpus` / `query_corpus` / `rebuild_corpus` / `reprime_corpus` preconditions made explicit (errors when unprimed, rebuild doesn't reprime, responses are LLM-generative).
-- `build_corpus` lists the canonical type set and emphasises checking `stats.observation_count > 0` before priming.
+- 8 server-beta-only tools tagged `[Server-beta only — DISABLED in worker runtime]`.
+- `search.obs_type`: warns about FTS5 type-token trap (`type` column not indexed).
+- `prime/query/rebuild/reprime_corpus`: preconditions and LLM-generative caveat explicit.
+- `build_corpus`: lists canonical types and emphasises `stats.observation_count > 0`.
 
 **🧠 Skill Cleanups**
-- `wowerpoint`: `disable-model-invocation: true` + transparency about the 3rd-party Cloudflare Worker, env-vars, and NotebookLM/Google data flow.
-- `version-bump`: `disable-model-invocation: true` + `[MAINTAINER ONLY]` prefix — prevents accidental `npm publish` on forks.
-- `mem-search`: examples now warn about the FTS5 type-token trap and show correct/anti-pattern queries.
-- `claude-mem-manual`: dedicated FTS5-trap section, `smart_*` AST tools marked as the supported code-nav path.
-- `knowledge-agent`: multi-type + date-range example added, `stats.observation_count > 0` check emphasised.
+- `wowerpoint`: auto-trigger disabled + 3rd-party Cloudflare/NotebookLM data flow disclosed.
+- `version-bump`: auto-trigger disabled + `[MAINTAINER ONLY]` prefix on forks.
+- `mem-search`: FTS5 type-token trap warning with correct/anti-pattern examples.
+- `claude-mem-manual`: dedicated FTS5-trap section; `smart_*` as supported code-nav path.
+- `knowledge-agent`: multi-type + date-range example; `observation_count > 0` check.
 
 **🔬 Tests**
-- 38/38 unit tests green (daemon, hook-client, patcher, importance, settings-doctor, memory-bank-export).
+- 38/38 unit tests green across daemon, hook, patcher, importance, doctor, bank-export.
 - 8/8 bundle-patcher tests green (apply, verify, rollback, idempotent, syntax-guard).
-- All 21 MCP tools live-smoke-tested post-deploy: 13 functional, 8 expected runtime-blocked (server-beta-only by design).
+- All 21 MCP tools smoke-tested live: 13 functional + 8 expected server-beta blocks.
 
 **🛟 Rollback**
 - One-liner: `bun work-sprint3/patch-mcp-bugs.mjs --rollback`.
-- Backups: `.sprint3-bak` (bundle patches) and `.uds-bak` (hook configs) live next to the patched files.
+- Backups `.sprint3-bak` (bundles) and `.uds-bak` (hook configs) sit next to patched files.
 
 ---
 
