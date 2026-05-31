@@ -130,44 +130,55 @@
 
 Sprint 1 → 2 → 3 patch notes. Upstream PR [#2728](https://github.com/thedotmack/claude-mem/pull/2728) · Issue [#2729](https://github.com/thedotmack/claude-mem/issues/2729).
 
-**🐛 Bug Fixes**
-- `build_corpus`: camelCase `dateStart`/`dateEnd` dual-accept; previously silently dropped.
-- `build_corpus`: multi-type filter returns all types; was wrong `searchArgs.type` key.
-- `hook-client`: RPC-ack pattern; fixes UDS frame loss when FIN beat the daemon read.
-- `daemon-server`: lock pairs with `--socket` path; test daemons no longer collide.
-- `daemon-server`: `resolveSessionDbId()` before insert; fixes 100% FK-violation loss.
-- `daemon-server`: `StringDecoder` framing; fixes multi-byte UTF-8 JSON corruption.
-- `daemon-server`: O_EXCL lock with stale-takeover; ends concurrent-spawn split-brain.
+**🆕 New Components (Sprint 1)**
+- New: daemon-server — persistent Bun UNIX socket receiving hook events via NDJSON.
+- New: hook-client — minimal wrapper with fast-skip filter and auto-spawn pattern.
+- New: hook-patch.v2 — rewrites hooks.json to the new path with backup and rollback.
+- New: setup-tree-sitter — restores the smart_* tree-sitter code-navigation tools.
 
-**⚡ Performance**
-- Hook latency p50: **467 ms → 60 ms (~7.8×)** via long-lived UDS singleton daemon.
-- Fast-skip path for non-interesting tools: ~54 ms p50.
-- Warm RPC roundtrip: 0.6–2 ms (Bun cold-start is the remaining floor).
-- NDJSON wire format + 200 ms RPC timeout: simple framing, bounded latency.
-- Importance heuristic 0..1 (failure +0.4, edits +0.2, ADR-pattern auto-pin to 1.0).
-- Idempotent bundle patcher with `.uds-bak` backups and `--rollback`; update-safe.
+**📊 Measured Results**
+- Hook latency: 467 ms → 60 ms (p50, 7.8×) · warm RPC roundtrip: 30 ms → 2 ms.
 
-**📖 MCP Tool Descriptions**
-- 8 server-beta-only tools tagged `[Server-beta only — DISABLED in worker runtime]`.
-- `search.obs_type`: warns about FTS5 type-token trap (`type` column not indexed).
-- `prime/query/rebuild/reprime_corpus`: preconditions and LLM-generative caveat explicit.
-- `build_corpus`: lists canonical types and emphasises `stats.observation_count > 0`.
+**🆕 New Features (Sprint 2)**
+- New: importance scoring 0..1 via heuristic (no LLM).
+- New: ADR auto-pin for architectural-decision markers.
+- New: memory-bank Markdown export in Cline 4-file convention.
+- New: settings-doctor — security / noise / dead-config audit.
+- New: MCP sidecar — 4 resources + 3 prompts.
 
-**🧠 Skill Cleanups**
-- `wowerpoint`: auto-trigger disabled + 3rd-party Cloudflare/NotebookLM data flow disclosed.
-- `version-bump`: auto-trigger disabled + `[MAINTAINER ONLY]` prefix on forks.
-- `mem-search`: FTS5 type-token trap warning with correct/anti-pattern examples.
-- `claude-mem-manual`: dedicated FTS5-trap section; `smart_*` as supported code-nav path.
-- `knowledge-agent`: multi-type + date-range example; `observation_count > 0` check.
+**🛠️ Fixes (Sprint 2 P0s)**
+- Fix: resolve+insert sdk_sessions before pending_messages — `session_db_id=0` → 100% silent loss.
+- Fix: callback-based write+drain — `socket.write` without drain-await → hook data never reached.
+- Fix: `node:string_decoder` framing — `chunk.toString()` with emojis → corrupted JSON.
+- Fix: O_EXCL lock file — concurrent hook clients spawning multiple daemons.
+- Fix: patcher `--fix-session-start-matcher` — memory not injected on `claude --resume`.
+- Fix: patcher `--fix-posttooluse-matcher` — `MultiEdit|Task|Skill` coverage gap.
+
+**🛠️ Fixes (Sprint 3 Bug B)**
+- Fix: CorpusRoutes camelCase dual-accept — `build_corpus(dateStart=…)` was silently dropped.
+- Fix: CorpusBuilder `obs_type` key routing — multi-type filter collapsed to a single type.
+
+**📖 MCP Tool Descriptions (Sprint 3)**
+- Docs: 8 server-beta-only tools tagged `[Server-beta only — DISABLED in worker runtime]`.
+- Docs: `search.obs_type` warns about the FTS5 type-token trap (`type` not indexed).
+- Docs: `prime/query/rebuild/reprime_corpus` preconditions and LLM-generative caveat explicit.
+- Docs: `build_corpus` lists canonical types + emphasises `stats.observation_count > 0`.
+
+**🧠 Skill Cleanups (Sprint 3)**
+- Skill: `wowerpoint` auto-trigger off + 3rd-party Cloudflare/NotebookLM data flow disclosed.
+- Skill: `version-bump` auto-trigger off + `[MAINTAINER ONLY]` prefix on forks.
+- Skill: `mem-search` adds FTS5 type-token trap warning with correct/anti-pattern queries.
+- Skill: `claude-mem-manual` dedicated FTS5-trap section; `smart_*` as code-nav path.
+- Skill: `knowledge-agent` multi-type + date-range example; `observation_count > 0` check.
 
 **🔬 Tests**
-- 38/38 unit tests green across daemon, hook, patcher, importance, doctor, bank-export.
-- 8/8 bundle-patcher tests green (apply, verify, rollback, idempotent, syntax-guard).
-- All 21 MCP tools smoke-tested live: 13 functional + 8 expected server-beta blocks.
+- 38/38 unit tests green: daemon, hook, patcher, importance, doctor, bank-export.
+- 8/8 bundle-patcher tests green: apply, verify, rollback, idempotent, syntax-guard.
+- 21/21 MCP tools live smoke-tested: 13 functional + 8 expected server-beta blocks.
 
 **🛟 Rollback**
 - One-liner: `bun work-sprint3/patch-mcp-bugs.mjs --rollback`.
-- Backups `.sprint3-bak` (bundles) and `.uds-bak` (hook configs) sit next to patched files.
+- Backups `.sprint3-bak` (bundles) and `.uds-bak` (hook configs) next to patched files.
 
 ---
 
